@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/hashicorp/hcl"
+
 	flag "github.com/ogier/pflag"
 )
 
@@ -37,6 +39,8 @@ type TerraformStateModule struct {
 	Resources map[string]interface{}
 }
 
+// end lifted structs
+
 // helper functions
 func stringInSlice(a string, list []string) bool {
 	for _, b := range list {
@@ -45,6 +49,11 @@ func stringInSlice(a string, list []string) bool {
 		}
 	}
 	return false
+}
+
+//  https://stackoverflow.com/questions/37194739/how-check-a-file-contain-string-or-not-in-golang
+// It might be hacky but easier to just treat the ACL as string to get the profile
+func getAwsProfileFromFile() string {
 }
 
 func getTerraformState() *TerraformState {
