@@ -3,8 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -190,6 +193,33 @@ func getInstanceSlice(terraformState *TerraformState) []ResourceInstance {
 	return instances
 }
 
+func getAwsProfile() string {
+	if profile == "" {
+		var p []string
+		files, err := ioutil.ReadDir(".")
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		for _, file := range files {
+			if filepath.Ext(file.Name()) == ".tf" {
+				p = append(p, getProfilesFromFile(file.Name())...)
+			}
+		}
+
+		if len(p) > 1 {
+			fmt.Printf("More than one profile found. Please select one from %v\n", p)
+			os.Exit(0)
+		} else if len(p) == 0 {
+			fmt.Printf("No aws profiles found. Attempting to use default.")
+			profile = "default"
+		} else {
+			profile = p[0]
+		}
+	}
+	return profile
+}
+
 func main() {
 	flag.Parse()
 
@@ -205,24 +235,12 @@ func main() {
 		fmt.Printf("Could not find resource %s. Instances available: %v\n", resource, instanceSlice)
 	}
 
-	if profile == "" {
-		p := getProfilesFromFile("core.tf")
-
-		if len(p) > 1 {
-			fmt.Printf("More than one profile found. Please select one from %v\n", p)
-			os.Exit(0)
-		} else if len(p) == 0 {
-			fmt.Printf("No aws profiles found. Attempting to use default.")
-			profile = "default"
-		} else {
-			profile = p[0]
-		}
-	}
+	profile = getAwsProfile()
 
 	fmt.Printf("Unprotecting %s using profile %s.\n", resource, profile)
 	// obviously this is wrong, just hacking
 	if unprotectInstance(profile, instanceSlice[0]) {
-		fmt.Printf("Instance %s unprotected.")
+		fmt.Printf("Instance %s unprotected.", instanceSlice[0].Resource)
 	} else {
 		fmt.Printf("Fail.")
 	}
