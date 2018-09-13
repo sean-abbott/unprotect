@@ -7,7 +7,9 @@ import (
 	"os/exec"
 	"strings"
 
-	//	"github.com/hashicorp/hcl"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/spf13/viper"
 
 	flag "github.com/ogier/pflag"
@@ -43,14 +45,30 @@ type TerraformStateModule struct {
 
 // end lifted structs
 
+// my stucts
+type TerraformStateInstance struct {
+	Type      string
+	DependsOn []interface{}
+	Primary   map[string]interface{}
+	Deposed   []interface{}
+	Provider  string
+}
+
 type TerraformConfig struct {
 	Providers []map[string]interface{}
 }
 
+type ResourceInstance struct {
+	Resource string
+	Id       string
+}
+
+// end my structs
+
 // helper functions
-func stringInSlice(a string, list []string) bool {
-	for _, b := range list {
-		if b == a {
+func resourceInState(a string, list []ResourceInstance) bool {
+	for _, ri := range list {
+		if ri.Resource == a {
 			return true
 		}
 	}
@@ -63,6 +81,34 @@ func getMapKeys(m map[string]interface{}) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+func initEc2(profile string) *ec2.EC2 {
+	sess := session.Must(session.NewSessionWithOptions(session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+		Profile:           profile,
+	}))
+	svc := ec2.New(sess)
+	return svc
+}
+
+func unprotectInstance(profile string, i ResourceInstance) bool {
+	e := initEc2(profile)
+	input := &ec2.ModifyInstanceAttributeInput{
+		InstanceId: aws.String(i.Id),
+		DisableApiTermination: &ec2.AttributeBooleanValue{
+			Value: aws.Bool(false),
+		},
+	}
+
+	result, err := e.ModifyInstanceAttribute(input)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+
+	fmt.Println(result)
+
+	return true
 }
 
 // access a terraform file and determine if it has any aws profiles in it
@@ -127,14 +173,16 @@ func getTerraformState() *TerraformState {
 
 }
 
-func getInstanceSlice(terraformState *TerraformState) []string {
-	instances := []string{}
+func getInstanceSlice(terraformState *TerraformState) []ResourceInstance {
+	instances := []ResourceInstance{}
 
 	for i, module := range terraformState.Modules {
-		for key, _ := range module.Resources {
+		for key, k := range module.Resources {
 			if strings.HasPrefix(key, "aws_instance") {
 				fmt.Printf("Module %d has an aws_instance.\n", i)
-				instances = append(instances, key)
+				id := k.(map[string]interface{})["primary"].(map[string]interface{})["id"].(string)
+				r := ResourceInstance{Resource: key, Id: id}
+				instances = append(instances, r)
 			}
 		}
 	}
@@ -153,7 +201,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	if !stringInSlice(resource, instanceSlice) {
+	if !resourceInState(resource, instanceSlice) {
 		fmt.Printf("Could not find resource %s. Instances available: %v\n", resource, instanceSlice)
 	}
 
@@ -172,6 +220,12 @@ func main() {
 	}
 
 	fmt.Printf("Unprotecting %s using profile %s.\n", resource, profile)
+	// obviously this is wrong, just hacking
+	if unprotectInstance(profile, instanceSlice[0]) {
+		fmt.Printf("Instance %s unprotected.")
+	} else {
+		fmt.Printf("Fail.")
+	}
 }
 
 func init() {
