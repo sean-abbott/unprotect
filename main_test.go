@@ -14,3 +14,22 @@ func TestValidateInstance(t *testing.T) {
 		t.Errorf("validateInstance failed. got: %s, want: %s", result.Resource, "myinstance")
 	}
 }
+
+func TestValidateAwsProfile(t *testing.T) {
+	tables := []struct {
+		foundProfiles []string
+		givenProfile  string
+		expected      string
+	}{
+		{[]string{"myprofile"}, "myprofile", "myprofile"},
+		{[]string{}, "", "default"},
+	}
+
+	for _, table := range tables {
+		profile = table.givenProfile
+		result, _ := validateAwsProfile(table.foundProfiles)
+		if result != table.expected {
+			t.Errorf("validateAwsProfile failed. got: %s, want: %s\n", result, table.expected)
+		}
+	}
+}
