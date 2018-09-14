@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -66,6 +67,11 @@ type ResourceInstance struct {
 	Id       string
 }
 
+type TerraformInstanceResult struct {
+	Instances []ResourceInstance
+	Error     error
+}
+
 // end my structs
 
 // helper functions
@@ -104,12 +110,10 @@ func unprotectInstance(profile string, i ResourceInstance) bool {
 		},
 	}
 
-	result, err := e.ModifyInstanceAttribute(input)
+	_, err := e.ModifyInstanceAttribute(input)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
-
-	fmt.Println(result)
 
 	return true
 }
@@ -146,22 +150,23 @@ func getProfilesFromFile(f string) []string {
 	return r
 }
 
-func getTerraformState() *TerraformState {
+func getTerraformState() (*TerraformState, error) {
 	var (
 		cmdOut []byte
 		err    error
 	)
+
 	cmd := "terraform"
 	args := []string{"state", "pull"}
 	if cmdOut, err = exec.Command(cmd, args...).Output(); err != nil {
 		fmt.Printf("'terraform state pull' failed. Are you in a terraform directory?")
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return nil, err
 	}
 
 	if len(cmdOut) == 0 {
 		fmt.Printf("terraform state pull did not return anything. Are you sure you're in a terraform module?\n")
-		os.Exit(1)
+		return nil, errors.New("Terraform state pull empty.")
 	}
 
 	terraformState := &TerraformState{}
@@ -169,10 +174,10 @@ func getTerraformState() *TerraformState {
 	if err := json.Unmarshal(cmdOut, terraformState); err != nil {
 		fmt.Printf("Failed to unmarshall terraform state pull output.\n")
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return nil, err
 	}
 
-	return terraformState
+	return terraformState, nil
 
 }
 
@@ -220,12 +225,33 @@ func getAwsProfile() string {
 	return profile
 }
 
+func getInstances(ch chan TerraformInstanceResult) {
+	fmt.Printf("Getting terraform state...")
+	terraformState, err := getTerraformState()
+	if err != nil {
+		ch <- TerraformInstanceResult{nil, err}
+	}
+	instanceSlice := getInstanceSlice(terraformState)
+	ch <- TerraformInstanceResult{instanceSlice, nil}
+}
+
 func main() {
 	flag.Parse()
 
-	fmt.Printf("Getting terraform state...")
-	terraformState := getTerraformState()
-	instanceSlice := getInstanceSlice(terraformState)
+	// run terraform to get the state
+	c := make(chan TerraformInstanceResult)
+	go getInstances(c)
+	instanceResult := <-c
+	if instanceResult.Error != nil {
+		fmt.Printf("Something went wrong getting the terraform state.\n")
+		fmt.Println(instanceResult.Error)
+		os.Exit(1)
+	}
+
+	instanceSlice := instanceResult.Instances
+
+	// grab any profiles from the local terraform files
+
 	if resource == "" {
 		fmt.Printf("Instances available: %v\n", instanceSlice)
 		os.Exit(0)
