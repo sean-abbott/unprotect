@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/manifoldco/promptui"
 	"github.com/spf13/viper"
 
 	flag "github.com/ogier/pflag"
@@ -68,16 +69,16 @@ type ResourceInstance struct {
 }
 
 type TerraformInstanceResult struct {
-	Instances []ResourceInstance
+	Instances map[string]ResourceInstance
 	Error     error
 }
 
 // end my structs
 
 // helper functions
-func resourceInState(a string, list []ResourceInstance) bool {
-	for _, ri := range list {
-		if ri.Resource == a {
+func resourceInState(a string, list map[string]ResourceInstance) bool {
+	for k := range list {
+		if k == a {
 			return true
 		}
 	}
@@ -181,8 +182,8 @@ func getTerraformState() (*TerraformState, error) {
 
 }
 
-func getInstanceSlice(terraformState *TerraformState) []ResourceInstance {
-	instances := []ResourceInstance{}
+func getInstanceMap(terraformState *TerraformState) map[string]ResourceInstance {
+	instances := map[string]ResourceInstance{}
 
 	for i, module := range terraformState.Modules {
 		for key, k := range module.Resources {
@@ -190,7 +191,7 @@ func getInstanceSlice(terraformState *TerraformState) []ResourceInstance {
 				fmt.Printf("Module %d has an aws_instance.\n", i)
 				id := k.(map[string]interface{})["primary"].(map[string]interface{})["id"].(string)
 				r := ResourceInstance{Resource: key, Id: id}
-				instances = append(instances, r)
+				instances[key] = r
 			}
 		}
 	}
@@ -231,8 +232,28 @@ func getInstances(ch chan TerraformInstanceResult) {
 	if err != nil {
 		ch <- TerraformInstanceResult{nil, err}
 	}
-	instanceSlice := getInstanceSlice(terraformState)
-	ch <- TerraformInstanceResult{instanceSlice, nil}
+	instanceMap := getInstanceMap(terraformState)
+	ch <- TerraformInstanceResult{instanceMap, nil}
+}
+
+func promptForInstance(instances map[string]ResourceInstance) string {
+	var nameSlice []string
+	for k := range instances {
+		nameSlice = append(nameSlice, k)
+	}
+
+	prompt := promptui.Select{
+		Label: "Select Instance",
+		Items: nameSlice,
+	}
+
+	_, result, err := prompt.Run()
+
+	if err != nil {
+		log.Fatal("Prompt failed %v\n", err)
+	}
+
+	return result
 }
 
 func validateInstance(t TerraformInstanceResult) ResourceInstance {
@@ -242,18 +263,17 @@ func validateInstance(t TerraformInstanceResult) ResourceInstance {
 		os.Exit(1)
 	}
 
-	instanceSlice := t.Instances
+	instanceMap := t.Instances
 
 	if resource == "" {
-		fmt.Printf("Instances available: %v\n", instanceSlice)
-		os.Exit(0)
+		resource = promptForInstance(instanceMap)
 	}
 
-	if !resourceInState(resource, instanceSlice) {
-		fmt.Printf("Could not find resource %s. Instances available: %v\n", resource, instanceSlice)
+	if !resourceInState(resource, instanceMap) {
+		fmt.Printf("Could not find resource %s. Instances available: %v\n", resource, instanceMap)
 	}
 
-	return instanceSlice[0]
+	return instanceMap[resource]
 }
 
 func main() {
@@ -276,7 +296,7 @@ func main() {
 	if unprotectInstance(profile, instance) {
 		fmt.Printf("Instance %s unprotected.\n", instance.Resource)
 	} else {
-		fmt.Printf("Fail.")
+		fmt.Printf("Failed to disable termination protection for %s.", instance.Resource)
 	}
 }
 
