@@ -250,7 +250,8 @@ func promptForInstance(instances map[string]ResourceInstance) string {
 	_, result, err := prompt.Run()
 
 	if err != nil {
-		log.Fatal("Prompt failed %v\n", err)
+		fmt.Printf("Prompt Error: %v\n", err)
+		log.Fatal("Prompt failed.\n")
 	}
 
 	return result
