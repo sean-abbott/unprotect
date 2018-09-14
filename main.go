@@ -198,7 +198,7 @@ func getInstanceSlice(terraformState *TerraformState) []ResourceInstance {
 	return instances
 }
 
-func getAwsProfile() string {
+func getAwsProfile(c chan string) {
 	if profile == "" {
 		var p []string
 		files, err := ioutil.ReadDir(".")
@@ -222,7 +222,7 @@ func getAwsProfile() string {
 			profile = p[0]
 		}
 	}
-	return profile
+	c <- profile
 }
 
 func getInstances(ch chan TerraformInstanceResult) {
@@ -235,22 +235,14 @@ func getInstances(ch chan TerraformInstanceResult) {
 	ch <- TerraformInstanceResult{instanceSlice, nil}
 }
 
-func main() {
-	flag.Parse()
-
-	// run terraform to get the state
-	c := make(chan TerraformInstanceResult)
-	go getInstances(c)
-	instanceResult := <-c
-	if instanceResult.Error != nil {
+func validateInstance(t TerraformInstanceResult) ResourceInstance {
+	if t.Error != nil {
 		fmt.Printf("Something went wrong getting the terraform state.\n")
-		fmt.Println(instanceResult.Error)
+		fmt.Println(t.Error)
 		os.Exit(1)
 	}
 
-	instanceSlice := instanceResult.Instances
-
-	// grab any profiles from the local terraform files
+	instanceSlice := t.Instances
 
 	if resource == "" {
 		fmt.Printf("Instances available: %v\n", instanceSlice)
@@ -261,12 +253,28 @@ func main() {
 		fmt.Printf("Could not find resource %s. Instances available: %v\n", resource, instanceSlice)
 	}
 
-	profile = getAwsProfile()
+	return instanceSlice[0]
+}
 
-	fmt.Printf("Unprotecting %s using profile %s.\n", resource, profile)
-	// obviously this is wrong, just hacking
-	if unprotectInstance(profile, instanceSlice[0]) {
-		fmt.Printf("Instance %s unprotected.", instanceSlice[0].Resource)
+func main() {
+	flag.Parse()
+
+	// run terraform to get the state
+	c := make(chan TerraformInstanceResult)
+	go getInstances(c)
+
+	// grab any profiles from the local terraform files
+	p := make(chan string)
+	go getAwsProfile(p)
+
+	instanceResult := <-c
+	instance := validateInstance(instanceResult)
+
+	profile = <-p
+	fmt.Printf("Unprotecting %s using profile %s.\n", instance.Resource, profile)
+
+	if unprotectInstance(profile, instance) {
+		fmt.Printf("Instance %s unprotected.\n", instance.Resource)
 	} else {
 		fmt.Printf("Fail.")
 	}
