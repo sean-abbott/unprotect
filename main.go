@@ -201,19 +201,18 @@ func getInstanceMap(terraformState *TerraformState) map[string]ResourceInstance 
 
 func getAwsProfile() ([]string, error) {
 	var p []string
-	if profile == "" {
-		files, err := ioutil.ReadDir(".")
-		if err != nil {
-			return nil, err
-		}
-
-		for _, file := range files {
-			if filepath.Ext(file.Name()) == ".tf" {
-				p = append(p, getProfilesFromFile(file.Name())...)
-			}
-		}
-	} else {
+	if profile != "" {
 		return []string{profile}, nil
+	}
+	files, err := ioutil.ReadDir(".")
+	if err != nil {
+		return nil, err
+	}
+
+	for _, file := range files {
+		if filepath.Ext(file.Name()) == ".tf" {
+			p = append(p, getProfilesFromFile(file.Name())...)
+		}
 	}
 	return p, nil
 }
@@ -221,16 +220,17 @@ func getAwsProfile() ([]string, error) {
 func validateAwsProfile(p []string) (string, error) {
 	var profile string
 	var err error
-	if len(p) > 1 {
+	switch len(p) {
+	case 0:
+		fmt.Printf("No aws profiles found. Attempting to use default.\n")
+		profile = "default"
+	case 1:
+		profile = p[0]
+	default:
 		profile, err = promptForProfile(p)
 		if err != nil {
 			return "", err
 		}
-	} else if len(p) == 0 {
-		fmt.Printf("No aws profiles found. Attempting to use default.\n")
-		profile = "default"
-	} else {
-		profile = p[0]
 	}
 
 	return profile, nil
