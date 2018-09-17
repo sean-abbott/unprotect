@@ -199,31 +199,41 @@ func getInstanceMap(terraformState *TerraformState) map[string]ResourceInstance 
 	return instances
 }
 
-func getAwsProfile(c chan string) {
-	if profile == "" {
-		var p []string
-		files, err := ioutil.ReadDir(".")
-		if err != nil {
-			log.Fatal(err)
-		}
+func getAwsProfile() ([]string, error) {
+	var p []string
+	if profile != "" {
+		return []string{profile}, nil
+	}
+	files, err := ioutil.ReadDir(".")
+	if err != nil {
+		return nil, err
+	}
 
-		for _, file := range files {
-			if filepath.Ext(file.Name()) == ".tf" {
-				p = append(p, getProfilesFromFile(file.Name())...)
-			}
-		}
-
-		if len(p) > 1 {
-			fmt.Printf("More than one profile found. Please select one from %v\n", p)
-			os.Exit(0)
-		} else if len(p) == 0 {
-			fmt.Printf("No aws profiles found. Attempting to use default.")
-			profile = "default"
-		} else {
-			profile = p[0]
+	for _, file := range files {
+		if filepath.Ext(file.Name()) == ".tf" {
+			p = append(p, getProfilesFromFile(file.Name())...)
 		}
 	}
-	c <- profile
+	return p, nil
+}
+
+func validateAwsProfile(p []string) (string, error) {
+	var profile string
+	var err error
+	switch len(p) {
+	case 0:
+		fmt.Printf("No aws profiles found. Attempting to use default.\n")
+		profile = "default"
+	case 1:
+		profile = p[0]
+	default:
+		profile, err = promptForProfile(p)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	return profile, nil
 }
 
 func getInstances(ch chan TerraformInstanceResult) {
@@ -257,6 +267,20 @@ func promptForInstance(instances map[string]ResourceInstance) string {
 	return result
 }
 
+func promptForProfile(p []string) (string, error) {
+	prompt := promptui.Select{
+		Label: "Select Profile",
+		Items: p,
+	}
+
+	_, result, err := prompt.Run()
+	if err != nil {
+		return "", err
+	}
+
+	return result, nil
+}
+
 func validateInstance(t TerraformInstanceResult) ResourceInstance {
 	if t.Error != nil {
 		fmt.Printf("Something went wrong getting the terraform state.\n")
@@ -285,16 +309,29 @@ func main() {
 	go getInstances(c)
 
 	// grab any profiles from the local terraform files
-	p := make(chan string)
-	go getAwsProfile(p)
+	p := make(chan []string)
+	go func(p chan []string) {
+		s, err := getAwsProfile()
+		if err != nil {
+			fmt.Printf("Error getting aws profile: %v\n", err)
+			os.Exit(1)
+		}
+		p <- s
+	}(p)
 
 	instanceResult := <-c
 	instance := validateInstance(instanceResult)
 
-	profile = <-p
-	fmt.Printf("Unprotecting %s using profile %s.\n", instance.Resource, profile)
+	profileResult := <-p
+	finalProfile, err := validateAwsProfile(profileResult)
+	if err != nil {
+		fmt.Printf("Error validating aws profile: %v\n", err)
+		os.Exit(1)
+	}
 
-	if unprotectInstance(profile, instance) {
+	fmt.Printf("Unprotecting %s using profile %s.\n", instance.Resource, finalProfile)
+
+	if unprotectInstance(finalProfile, instance) {
 		fmt.Printf("Instance %s unprotected.\n", instance.Resource)
 	} else {
 		fmt.Printf("Failed to disable termination protection for %s.", instance.Resource)
