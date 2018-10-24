@@ -93,6 +93,32 @@ func getMapKeys(m map[string]interface{}) []string {
 	return keys
 }
 
+func resourceToStateKeyStr(path []string, resource_key string) (string, error) {
+	if len(path) < 1 {
+		return nil, errors.New("No modules found in path given to resourceToStateKeyStr.")
+	}
+
+	if len(path) == 1 && path[0] == "root" {
+		return resource_key, nil
+	} else {
+		s := "module." + strings.Join(path[1:], ".module.")
+		return s, nil
+	}
+}
+
+func stateKeyStrToResource(s string) ([]string, string, error) {
+	if !strings.HasPrefix(s, "module") {
+		return []string{"root"}, s, nil
+	}
+
+	s = strings.Replace(s, "module.", "root.", 1)
+	s = strings.Replace(y, "module.", "", -1)
+	p := strings.Split(z, ".")
+	return p[:len(p)-1], p[len(p)-1], nil
+}
+
+// end helper functions
+
 func initEc2(profile string) *ec2.EC2 {
 	sess := session.Must(session.NewSessionWithOptions(session.Options{
 		SharedConfigState: session.SharedConfigEnable,
