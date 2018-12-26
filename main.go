@@ -68,11 +68,6 @@ type ResourceInstance struct {
 	Id       string
 }
 
-type TerraformInstanceResult struct {
-	Instances map[string]ResourceInstance
-	Error     error
-}
-
 // end my structs
 
 // helper functions
@@ -251,16 +246,6 @@ func validateAwsProfile(p []string) (string, error) {
 	}
 
 	return profile, nil
-}
-
-func getInstances(ch chan TerraformInstanceResult) {
-	fmt.Printf("Getting terraform state...")
-	terraformState, err := getTerraformState()
-	if err != nil {
-		ch <- TerraformInstanceResult{nil, err}
-	}
-	instanceMap := getInstanceMap(terraformState)
-	ch <- TerraformInstanceResult{instanceMap, nil}
 }
 
 func promptForInstance(instances map[string]ResourceInstance) string {
