@@ -28,20 +28,6 @@ func openAndUnmarshal(i interface{}, path string) error {
 
 }
 
-func TestValidateInstance(t *testing.T) {
-	// in main(), resource is provided by flag.Parse as a global
-	resource = "myinstance"
-
-	var fakeResult TerraformInstanceResult
-	openAndUnmarshal(&fakeResult, "testdata/fakeInstanceResult.json")
-
-	result := validateInstance(fakeResult)
-
-	if result.Resource != "myinstance" {
-		t.Errorf("validateInstance failed. got: %s, want: %s", result.Resource, "myinstance")
-	}
-}
-
 type resourceToStateKeyTest struct {
 	file     string
 	expected string

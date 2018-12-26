@@ -298,32 +298,34 @@ func promptForProfile(p []string) (string, error) {
 	return result, nil
 }
 
-func validateInstance(t TerraformInstanceResult) ResourceInstance {
-	if t.Error != nil {
-		fmt.Printf("Something went wrong getting the terraform state.\n")
-		fmt.Println(t.Error)
-		os.Exit(1)
-	}
-
-	instanceMap := t.Instances
+func validateInstance(t map[string]ResourceInstance) ResourceInstance {
 
 	if resource == "" {
-		resource = promptForInstance(instanceMap)
+		resource = promptForInstance(t)
 	}
 
-	if !resourceInState(resource, instanceMap) {
-		fmt.Printf("Could not find resource %s. Instances available: %v\n", resource, instanceMap)
+	if !resourceInState(resource, t) {
+		fmt.Printf("Could not find resource %s. Instances available: %v\n", resource, t)
 	}
 
-	return instanceMap[resource]
+	return t[resource]
 }
 
 func main() {
 	flag.Parse()
 
-	// run terraform to get the state
-	c := make(chan TerraformInstanceResult)
-	go getInstances(c)
+	c := make(chan map[string]ResourceInstance)
+	go func(c chan map[string]ResourceInstance) {
+		// run terraform to get the state
+		fmt.Printf("Getting terraform state...")
+		terraformState, err := getTerraformState()
+		if err != nil {
+			fmt.Printf("Error getting instances to unprotect: %v\n", err)
+			os.Exit(1)
+		}
+		instanceMap := getInstanceMap(terraformState)
+		c <- instanceMap
+	}(c)
 
 	// grab any profiles from the local terraform files
 	p := make(chan []string)
