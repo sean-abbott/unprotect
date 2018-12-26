@@ -93,28 +93,17 @@ func getMapKeys(m map[string]interface{}) []string {
 	return keys
 }
 
-func resourceToStateKeyStr(path []string, resource_key string) (string, error) {
+func resourceToStateKeyStr(path []string, resourceKey string) (string, error) {
 	if len(path) < 1 {
-		return nil, errors.New("No modules found in path given to resourceToStateKeyStr.")
+		return "", errors.New("No modules found in path given to resourceToStateKeyStr.")
 	}
 
 	if len(path) == 1 && path[0] == "root" {
-		return resource_key, nil
+		return resourceKey, nil
 	} else {
-		s := "module." + strings.Join(path[1:], ".module.")
+		s := "module." + strings.Join(path[1:], ".module.") + "." + resourceKey
 		return s, nil
 	}
-}
-
-func stateKeyStrToResource(s string) ([]string, string, error) {
-	if !strings.HasPrefix(s, "module") {
-		return []string{"root"}, s, nil
-	}
-
-	s = strings.Replace(s, "module.", "root.", 1)
-	s = strings.Replace(y, "module.", "", -1)
-	p := strings.Split(z, ".")
-	return p[:len(p)-1], p[len(p)-1], nil
 }
 
 // end helper functions
@@ -169,8 +158,9 @@ func getProfilesFromFile(f string) []string {
 		if keys[0] == "aws" {
 			var aws_provider_map map[string]interface{}
 			aws_provider_map = provider["aws"].([]map[string]interface{})[0]
-			profile := aws_provider_map["profile"].(string)
-			r = append(r, profile)
+			if profile, ok := aws_provider_map["profile"].(string); ok {
+				r = append(r, profile)
+			}
 		}
 	}
 
@@ -217,7 +207,8 @@ func getInstanceMap(terraformState *TerraformState) map[string]ResourceInstance 
 				fmt.Printf("Module %d has an aws_instance.\n", i)
 				id := k.(map[string]interface{})["primary"].(map[string]interface{})["id"].(string)
 				r := ResourceInstance{Resource: key, Id: id}
-				instances[key] = r
+				rk, _ := resourceToStateKeyStr(module.Path, key)
+				instances[rk] = r
 			}
 		}
 	}

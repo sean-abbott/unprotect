@@ -1,0 +1,6 @@
+{
+    "path": [
+        "root"
+    ],
+    "resourceKey": "aws_instance.web"
+}

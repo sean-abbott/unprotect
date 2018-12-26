@@ -1,0 +1,9 @@
+{
+    "instances": {
+        "myinstance": {
+            "resource": "myinstance",
+            "id": "i-123456"
+        }
+    },
+    "error": null
+}
