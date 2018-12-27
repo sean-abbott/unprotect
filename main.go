@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,21 +27,21 @@ var (
 
 // These structures were lifted from https://github.com/gruntwork-io/terragrunt/blob/master/remote/terraform_state_file.go
 // The structure of the Terraform .tfstate file
-type TerraformState struct {
+type terraformState struct {
 	Version int
 	Serial  int
-	Backend *TerraformBackend
-	Modules []TerraformStateModule
+	Backend *terraformBackend
+	Modules []terraformStateModule
 }
 
 // The structure of the "backend" section of the Terraform .tfstate file
-type TerraformBackend struct {
+type terraformBackend struct {
 	Type   string
 	Config map[string]interface{}
 }
 
 // The structure of a "module" section of the Terraform .tfstate file
-type TerraformStateModule struct {
+type terraformStateModule struct {
 	Path      []string
 	Outputs   map[string]interface{}
 	Resources map[string]interface{}
@@ -51,7 +50,7 @@ type TerraformStateModule struct {
 // end lifted structs
 
 // my stucts
-type TerraformStateInstance struct {
+type terraformStateInstance struct {
 	Type      string
 	DependsOn []interface{}
 	Primary   map[string]interface{}
@@ -59,19 +58,19 @@ type TerraformStateInstance struct {
 	Provider  string
 }
 
-type TerraformConfig struct {
+type terraformConfig struct {
 	Providers []map[string]interface{}
 }
 
-type ResourceInstance struct {
+type resourceInstance struct {
 	Resource string
-	Id       string
+	ID       string
 }
 
 // end my structs
 
 // helper functions
-func resourceInState(a string, list map[string]ResourceInstance) bool {
+func resourceInState(a string, list map[string]resourceInstance) bool {
 	for k := range list {
 		if k == a {
 			return true
@@ -90,15 +89,14 @@ func getMapKeys(m map[string]interface{}) []string {
 
 func resourceToStateKeyStr(path []string, resourceKey string) (string, error) {
 	if len(path) < 1 {
-		return "", errors.New("No modules found in path given to resourceToStateKeyStr.")
+		return "", errors.New("no modules found in path given to resourceToStateKeyStr")
 	}
 
 	if len(path) == 1 && path[0] == "root" {
 		return resourceKey, nil
-	} else {
-		s := "module." + strings.Join(path[1:], ".module.") + "." + resourceKey
-		return s, nil
 	}
+	s := "module." + strings.Join(path[1:], ".module.") + "." + resourceKey
+	return s, nil
 }
 
 // end helper functions
@@ -112,10 +110,10 @@ func initEc2(profile string) *ec2.EC2 {
 	return svc
 }
 
-func unprotectInstance(profile string, i ResourceInstance) bool {
+func unprotectInstance(profile string, i resourceInstance) bool {
 	e := initEc2(profile)
 	input := &ec2.ModifyInstanceAttributeInput{
-		InstanceId: aws.String(i.Id),
+		InstanceId: aws.String(i.ID),
 		DisableApiTermination: &ec2.AttributeBooleanValue{
 			Value: aws.Bool(false),
 		},
@@ -141,7 +139,7 @@ func getProfilesFromFile(f string) []string {
 	}
 
 	var r []string
-	var p TerraformConfig
+	var p terraformConfig
 	if v.InConfig("provider") {
 		p.Providers = v.Get("provider").([]map[string]interface{})
 	} else {
@@ -151,9 +149,9 @@ func getProfilesFromFile(f string) []string {
 	for _, provider := range p.Providers {
 		keys := getMapKeys(provider)
 		if keys[0] == "aws" {
-			var aws_provider_map map[string]interface{}
-			aws_provider_map = provider["aws"].([]map[string]interface{})[0]
-			if profile, ok := aws_provider_map["profile"].(string); ok {
+			var awsProviderMap map[string]interface{}
+			awsProviderMap = provider["aws"].([]map[string]interface{})[0]
+			if profile, ok := awsProviderMap["profile"].(string); ok {
 				r = append(r, profile)
 			}
 		}
@@ -162,7 +160,7 @@ func getProfilesFromFile(f string) []string {
 	return r
 }
 
-func getTerraformState() (*TerraformState, error) {
+func getTerraformState() (*terraformState, error) {
 	var (
 		cmdOut []byte
 		err    error
@@ -178,10 +176,10 @@ func getTerraformState() (*TerraformState, error) {
 
 	if len(cmdOut) == 0 {
 		fmt.Printf("terraform state pull did not return anything. Are you sure you're in a terraform module?\n")
-		return nil, errors.New("Terraform state pull empty.")
+		return nil, errors.New("terraform state pull empty")
 	}
 
-	terraformState := &TerraformState{}
+	terraformState := &terraformState{}
 
 	if err := json.Unmarshal(cmdOut, terraformState); err != nil {
 		fmt.Printf("Failed to unmarshall terraform state pull output.\n")
@@ -193,15 +191,15 @@ func getTerraformState() (*TerraformState, error) {
 
 }
 
-func getInstanceMap(terraformState *TerraformState) map[string]ResourceInstance {
-	instances := map[string]ResourceInstance{}
+func getInstanceMap(tState *terraformState) map[string]resourceInstance {
+	instances := map[string]resourceInstance{}
 
-	for i, module := range terraformState.Modules {
+	for i, module := range tState.Modules {
 		for key, k := range module.Resources {
 			if strings.HasPrefix(key, "aws_instance") {
 				fmt.Printf("Module %d has an aws_instance.\n", i)
 				id := k.(map[string]interface{})["primary"].(map[string]interface{})["id"].(string)
-				r := ResourceInstance{Resource: key, Id: id}
+				r := resourceInstance{Resource: key, ID: id}
 				rk, _ := resourceToStateKeyStr(module.Path, key)
 				instances[rk] = r
 			}
@@ -248,7 +246,7 @@ func validateAwsProfile(p []string) (string, error) {
 	return profile, nil
 }
 
-func promptForInstance(instances map[string]ResourceInstance) string {
+func promptForInstance(instances map[string]resourceInstance) string {
 	var nameSlice []string
 	for k := range instances {
 		nameSlice = append(nameSlice, k)
@@ -262,8 +260,7 @@ func promptForInstance(instances map[string]ResourceInstance) string {
 	_, result, err := prompt.Run()
 
 	if err != nil {
-		fmt.Printf("Prompt Error: %v\n", err)
-		log.Fatal("Prompt failed.\n")
+		panic(fmt.Sprintf("Prompt Error: %v\n", err))
 	}
 
 	return result
@@ -283,7 +280,7 @@ func promptForProfile(p []string) (string, error) {
 	return result, nil
 }
 
-func validateInstance(t map[string]ResourceInstance) ResourceInstance {
+func validateInstance(t map[string]resourceInstance) resourceInstance {
 
 	if resource == "" {
 		resource = promptForInstance(t)
@@ -299,16 +296,16 @@ func validateInstance(t map[string]ResourceInstance) ResourceInstance {
 func main() {
 	flag.Parse()
 
-	c := make(chan map[string]ResourceInstance)
-	go func(c chan map[string]ResourceInstance) {
+	c := make(chan map[string]resourceInstance)
+	go func(c chan map[string]resourceInstance) {
 		// run terraform to get the state
 		fmt.Printf("Getting terraform state...")
-		terraformState, err := getTerraformState()
+		tState, err := getTerraformState()
 		if err != nil {
 			fmt.Printf("Error getting instances to unprotect: %v\n", err)
 			os.Exit(1)
 		}
-		instanceMap := getInstanceMap(terraformState)
+		instanceMap := getInstanceMap(tState)
 		c <- instanceMap
 	}(c)
 
