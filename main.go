@@ -49,7 +49,6 @@ type terraformStateModule struct {
 
 // end lifted structs
 
-// my stucts
 type terraformStateInstance struct {
 	Type      string
 	DependsOn []interface{}
@@ -66,8 +65,6 @@ type resourceInstance struct {
 	Resource string
 	ID       string
 }
-
-// end my structs
 
 // helper functions
 func resourceInState(a string, list map[string]resourceInstance) bool {
@@ -100,6 +97,11 @@ func resourceToStateKeyStr(path []string, resourceKey string) (string, error) {
 }
 
 // end helper functions
+
+func init() {
+	flag.StringVarP(&resource, "resource", "r", "", "Resource to unprotect")
+	flag.StringVarP(&profile, "profile", "p", "", "AWS profile to use")
+}
 
 func initEc2(profile string) *ec2.EC2 {
 	sess := session.Must(session.NewSessionWithOptions(session.Options{
@@ -197,7 +199,6 @@ func getInstanceMap(tState *terraformState) map[string]resourceInstance {
 	for i, module := range tState.Modules {
 		for key, k := range module.Resources {
 			if strings.HasPrefix(key, "aws_instance") {
-				fmt.Printf("Module %d has an aws_instance.\n", i)
 				id := k.(map[string]interface{})["primary"].(map[string]interface{})["id"].(string)
 				r := resourceInstance{Resource: key, ID: id}
 				rk, _ := resourceToStateKeyStr(module.Path, key)
@@ -337,9 +338,4 @@ func main() {
 	} else {
 		fmt.Printf("Failed to disable termination protection for %s.", instance.Resource)
 	}
-}
-
-func init() {
-	flag.StringVarP(&resource, "resource", "r", "", "Resource to unprotect")
-	flag.StringVarP(&profile, "profile", "p", "", "AWS profile to use")
 }
