@@ -91,6 +91,8 @@ func resourceToStateKeyStr(path []string, resourceKey string) (string, error) {
 
 	if len(path) == 1 && path[0] == "root" {
 		return resourceKey, nil
+	} else if len(path) == 1 && path[0] == "root" {
+		return "", errors.New("unexpected path slice structure")
 	}
 	s := "module." + strings.Join(path[1:], ".module.") + "." + resourceKey
 	return s, nil
@@ -196,7 +198,7 @@ func getTerraformState() (*terraformState, error) {
 func getInstanceMap(tState *terraformState) map[string]resourceInstance {
 	instances := map[string]resourceInstance{}
 
-	for i, module := range tState.Modules {
+	for _, module := range tState.Modules {
 		for key, k := range module.Resources {
 			if strings.HasPrefix(key, "aws_instance") {
 				id := k.(map[string]interface{})["primary"].(map[string]interface{})["id"].(string)
