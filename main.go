@@ -152,7 +152,7 @@ func getProfilesFromFile(f string) []string {
 
 	for _, provider := range p.Providers {
 		keys := getMapKeys(provider)
-		if keys[0] == "aws" {
+		if len(keys) > 0 && keys[0] == "aws" {
 			var awsProviderMap map[string]interface{}
 			awsProviderMap = provider["aws"].([]map[string]interface{})[0]
 			if profile, ok := awsProviderMap["profile"].(string); ok {
