@@ -1,0 +1,7 @@
+{
+    "path": [
+        "root",
+        "prometheus_1"
+    ],
+    "resourceKey": "aws_instance.prometheus"
+}
